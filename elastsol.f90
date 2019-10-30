@@ -1,13 +1,14 @@
 module elastsol
    use iso_fortran_env, only: rp => REAL64
-   use hexa27n27q
-   use matrix
+   use hexa_lagr
+   use csr3s, only: matrix_csr3 => matrix
    implicit none
 
-   logical,      parameter :: debug = .TRUE.
-   real(kind=rp),parameter :: tol = 1.E-7, beta = 0.25_rp, tau = 0.5_rp
+   logical,      parameter,private :: debug = .TRUE.,                    &
+                                      sparse_matrix = .TRUE.
+   real(kind=rp),parameter,private :: tol = 1.E-7, beta = 0.25_rp,       &                                        au = 0.5_rp
 
-   integer,parameter                      :: ned = nsd*nen
+   integer,parameter                      :: ned = nsd*nen, logfile=7
    integer,                  private,save :: nnod, nele, neqn
    integer,      allocatable,private,save :: id(:,:), conn(:,:)
    real(kind=rp),allocatable,private,save :: X(:,:), M(:), a_tp(:,:)
@@ -29,7 +30,7 @@ contains
       call gen_id(id,neqn)
 
       ! find sparse matrix strcuture
-      if(mat%is_sparse)
+      if(sparse_matrix)
          allocate(dmat(neqn,neqn))
          call get_matrix_struct(dmat)
          call mat%create(dmat)
@@ -119,7 +120,7 @@ contains
 
       ! initialize Newton-Raphson iterations
       a_tp = a
-      a    = -(v/(dt*beta)) + (0.5_rp-beta)*a_tp/beta)
+      a    = -(v/(dt*beta) + (0.5_rp-beta)*a_tp/beta)
       v    = v + dt*((1._rp-tau)*a_tp + tau*a)
 
       newton : do iter =1,maxiter
