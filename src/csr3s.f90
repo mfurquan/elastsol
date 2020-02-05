@@ -7,11 +7,11 @@
 !=======================================================================
 include "mkl_dss.f90"
 module csr3s
-   use iso_fortran_env
+   !use iso_fortran_env
    use mkl_dss
    implicit none
 
-   integer,parameter,private :: rp = REAL64
+   integer,parameter,private :: rp = 8!REAL64
 
    type :: matrix_csr3
       integer :: nval, nrow
@@ -20,6 +20,7 @@ module csr3s
       contains
         procedure :: create
         procedure :: add2entry, replace_entry
+        procedure :: times
         procedure :: solve
         procedure :: free
    end type matrix_csr3
@@ -75,6 +76,14 @@ module csr3s
          ierr = dss_factor(this%handle,MKL_DSS_INDEFINITE,val)
          ierr = dss_solve(this%handle,MKL_DSS_DEFAULTS,rhs,1,solve)
       end function solve
+
+      function times(this,A,v)
+         class(matrix_csr3),intent(in) :: this
+         real(kind=rp),     intent(in) :: A(this%nval), v(this%nrow)
+         real(kind=rp)                 :: times(this%nrow)
+         
+         call mkl_dcsrgemv('N',this%nrow,A,this%row_i,this%col,v,times)
+      end function times
 
       subroutine create(this,struct_matT)
          implicit none
