@@ -62,6 +62,7 @@ contains
       allocate(du(neqn))
 
       ! form mass matrix
+      M = 0._rp
       do concurrent (iele = 1:nele)
          i_ele = iloc(iele,id)
          X_ele = floc(iele, X)
@@ -112,6 +113,7 @@ contains
          real(kind=rp)            :: m_ele(ned,ned), intgrl
          integer                  :: isd, ien, jen
 
+         m_ele = 0._rp
          do concurrent (ien = 1:nen, jen = 1:nen)
             intgrl = rho0*integ(phi(:,ien)*phi(:,jen),Xe)
             do concurrent (isd = 1:nsd)
@@ -127,49 +129,53 @@ contains
       deallocate(X)
       deallocate(M)
       deallocate(Kaug)
-      deallocate(a_tp)
       deallocate(du)
+      if(allocated(a_tp))deallocate(a_tp)
       call mat%free
    end subroutine exit_elastsol
 
-   subroutine deform(u,v,a,F,Fnod,nF,E,nu,dt,steady)
-      real(kind=rp),dimension(nsd,nnod),intent(inout) :: u, v, a
+   subroutine deform(u,F,Fnod,nF,E,nu,v,a,dt)
       integer,      intent(in) :: nF, Fnod(nF)
-      real(kind=rp),intent(in) :: F(nsd,nF), E, nu, dt
-      logical,      intent(in),optional :: steady
+      real(kind=rp),intent(in) :: F(nsd,nF), E, nu
+      real(kind=rp),intent(in),optional :: dt
+      real(kind=rp),intent(inout),dimension(nsd,nnod) :: u(nsd,nnod)
+      real(kind=rp),intent(inout),dimension(nsd,nnod),optional :: v, a
       real(kind=rp) :: resnorm, F_ele(nqd,nsd,nsd), X_ele(nsd,nen),      &
-                       res(neqn), stdy_switch, lambda, mu
+                       u_ele(nsd,nen), res(neqn), lambda, mu
       integer :: iter, iele, i_ele(nsd,nen)
+      logical :: unsteady
 
-      stdy_switch = 1._rp
-      if(present(steady)) then
-         if(steady) stdy_switch = 0._rp
-      end if
-
-      lambda = nu*E/((1._rp+nu)*(1._rp-2._rp*nu))
-      mu     =    E/((1._rp+nu)*2._rp)
+      unsteady = present(dt)
+      lambda   = nu*E/((1._rp+nu)*(1._rp-2._rp*nu))
+      mu       =    E/((1._rp+nu)*2._rp)
 
       ! initialize Newton-Raphson iterations
-      a_tp = a
-      a    = -(v/(dt*beta) + (0.5_rp-beta)*a_tp/beta)
-      v    = v + dt*((1._rp-tau)*a_tp + tau*a)
+      if(unsteady) then
+         a_tp = a
+         a    = -(v/(dt*beta) + (0.5_rp-beta)*a_tp/beta)
+         v    = v + dt*((1._rp-tau)*a_tp + tau*a)
+      end if
 
       newton : do iter = 1,maxiter
-         res = 0._rp; Kaug = 0._rp
+         if(unsteady) then
+            res  = Fext(F,Fnod,nF) - Finrt(a)
+            Kaug = M/(dt*dt*beta)
+         else
+            res  = Fext(F,Fnod,nF)
+            Kaug = 0._rp
+         end if
+
          do concurrent (iele = 1:nele)
             i_ele = iloc(iele,id)
             X_ele = floc(iele,X)
-            F_ele = grad(floc(iele,u),X_ele)
+            u_ele = floc(iele,u) + X_ele
+            F_ele = grad(u_ele,X_ele)
             ! assembling internal force vector
             call assemble_vec(res, i_ele,fint(F_ele,X_ele))
             ! assembling internal tangent stiffness matrix
             call assemble_mat(Kaug,i_ele,ktan(F_ele,X_ele))
          end do
-         
-         res = Fext(F,Fnod,nF)       & ! External force vector
-             - Finrt(a)*stdy_switch  & ! Inertial force vector
-             - res                     ! Internal force vector
-
+        
          !check convergence
          resnorm = NORM2(res)/neqn
          if(resnorm > tol) then
@@ -180,12 +186,13 @@ contains
 
 
          ! finding displacement increment
-         Kaug = Kaug + M/(dt*dt*beta)*stdy_switch !augment stiffness matrix
-         du   = mat%solve(Kaug,res)
+         du = mat%solve(Kaug,res)
 
          call update_statvec(u,du)
-         call update_statvec(v,du*tau/(beta*dt))
-         call update_statvec(a,du/(beta*dt*dt))
+         if(unsteady) then
+            call update_statvec(v,du*tau/(beta*dt))
+            call update_statvec(a,du/(beta*dt*dt))
+         end if
       end do newton
 
       if(iter >= maxiter) error stop 'In deform: failed to converge in &
@@ -220,7 +227,7 @@ contains
          phi_X = dphi_d(Xe)
          do concurrent (ien = 1:nen)
             fint((ien-1)*nsd+1:ien*nsd)                                  &
-               = integ(B(Fe,phi_X(:,:,ien)).dot.S,Xe)
+               = -integ(B(Fe,phi_X(:,:,ien)).dot.S,Xe)
          end do
       end function fint
 
@@ -267,7 +274,7 @@ contains
          real(kind=rp) :: T(nqd,nsd,nsd)
 
          T(:,1,1) = S(:,1); T(:,1,2) = S(:,4); T(:,1,3) = S(:,6)
-         T(:,2,1) = S(:,4); T(:,2,2) = S(:,3); T(:,2,3) = S(:,5)
+         T(:,2,1) = S(:,4); T(:,2,2) = S(:,2); T(:,2,3) = S(:,5)
          T(:,3,1) = S(:,6); T(:,3,2) = S(:,5); T(:,3,3) = S(:,3)
       end function Voigt2tensor
 
@@ -384,7 +391,7 @@ contains
          inv(:,3) = [A(1,2)*A(2,3)-A(2,2)*A(1,3),                        &
                      A(1,3)*A(2,1)-A(2,3)*A(1,1),                        &
                      A(1,1)*A(2,2)-A(2,1)*A(1,2)]
-         inv = inv/det(A)
+         inv = transpose(inv)/det(A)
       end function inv
    end function dphi_d
 

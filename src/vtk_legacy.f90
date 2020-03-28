@@ -90,7 +90,8 @@ module vtk_legacy
          write(funit,fstr) 'VECTORS '//variable//' float'
          do i = 1,nn
             !write(funit,*) v(1,i),v(2,i),v(3,i)
-            write(funit,'(e16.9,a,e16.9,a,e16.9)') v(1,i),' ',v(2,i),' ',v(3,i)
+            write(funit,'(e16.9,a,e16.9,a,e16.9)')                       &
+                    v(1,i),' ',v(2,i),' ',v(3,i)
          end do
 
          write(funit,*)
@@ -99,4 +100,29 @@ module vtk_legacy
       subroutine exit_vtk
          close(funit)
       end subroutine exit_vtk
+
+      pure function split_HEXA(con)
+         integer,intent(in) :: con(:,:)
+         integer :: split_HEXA(8,8*SIZE(con,2)), i, nelem
+
+         nelem = SIZE(con,2)
+         do concurrent (i = 1:nelem)
+            split_HEXA(:,(i-1)*8+1) = [con( 1,i),con( 2,i),con( 5,i),    &
+                    con( 4,i),con(10,i),con(11,i),con(14,i),con(13,i)]
+            split_HEXA(:,(i-1)*8+2) = [con( 2,i),con( 3,i),con( 6,i),    &
+                    con( 5,i), con(11,i),con(12,i),con(15,i),con(14,i)]
+            split_HEXA(:,(i-1)*8+3) = [con( 4,i),con( 5,i),con( 8,i),    &
+                    con( 7,i),con(13,i),con(14,i),con(17,i),con(16,i)]
+            split_HEXA(:,(i-1)*8+4) = [con( 5,i),con( 6,i),con( 9,i),    &
+                    con( 8,i),con(14,i),con(15,i),con(18,i),con(17,i)]
+            split_HEXA(:,(i-1)*8+5) = [con(10,i),con(11,i),con(14,i),    &
+                    con(13,i),con(19,i),con(20,i),con(23,i),con(22,i)]
+            split_HEXA(:,(i-1)*8+6) = [con(11,i),con(12,i),con(15,i),    &
+                    con(14,i),con(20,i),con(21,i),con(24,i),con(23,i)]
+            split_HEXA(:,(i-1)*8+7) = [con(13,i),con(14,i),con(17,i),    &
+                    con(16,i),con(22,i),con(23,i),con(26,i),con(25,i)]
+            split_HEXA(:,(i-1)*8+8) = [con(14,i),con(15,i),con(18,i),    &
+                    con(17,i),con(23,i),con(24,i),con(27,i),con(26,i)]
+               end do
+      end function split_HEXA
 end module vtk_legacy

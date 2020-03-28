@@ -50,12 +50,12 @@ module hexa_lagr
                               i = 1,nen1), j = 1,nen1), k = 1,nen1-1)],  &
                           [nen1,nen1,nen1-1]),1,nqd1)
    
-   real(kind=rp),parameter,private,dimension(nen1) ::                 &
+   real(kind=rp),parameter,private,dimension(nen1) ::                    &
       xm    = [(-1+2*i/deg, i=0,deg)]                 
 
-   real(kind=rp),parameter,private,dimension(nqd1,nen1,nen1) ::       &
-      xq    = spread(spread(xg(qi:qf),2,nen1),3,nen1),                &
-      xa    = spread(spread(xm,1,nen1),1,nqd1),                       &
+   real(kind=rp),parameter,private,dimension(nqd1,nen1,nen1) ::          &
+      xq    = spread(spread(xg(qi:qf),2,nen1),3,nen1),                   &
+      xa    = spread(spread(xm,1,nen1),1,nqd1),                          &
       xb    = spread(spread(xm,1,nqd1),3,nen1)        
 
 
